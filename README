@@ -1,0 +1,203 @@
+This is the distribution containing source files and scripts
+corresponding to the project at CMU investigating TCP Throughput
+Collapse in Cluster-Based Storage Systems.  For an overview of the
+project, please refer to our FAST 2008 paper entitled "Measurement
+and Analysis of TCP Throughput Collapse in Cluster-Based Storage
+Systems".
+
+Students working on this project
+Elie Krevat, Amar Phanishayee, Vijay Vasudevan
+
+CMU Faculty members
+David G. Andersen, Gregory R. Ganger, Garth A. Gibson, Srinivasan Seshan
+
+
+-----------------------------------
+Simulation code installation tips
+-----------------------------------
+Note: We used GNU/Linux as our platform for development and testing.
+      Shell scripts are written for bash.
+
+* install UnixStats (url) and put UnixStats/bin in the path
+* install ns-allinone-2.30
+  - http://nsnam.isi.edu/nsnam/index.php/Downloading_and_installing_ns-2
+  - http://nchc.dl.sourceforge.net/sourceforge/nsnam/ns-allinone-2.30.tar.gz
+  - to use incast simulation code, once the ns build is complete 
+    EITHER
+        (better option! :-)
+        patch your ns source using simulation/src/ns-2.30.patch
+        (e.g. copy over the patch file to the ns src directory and "patch -p1 <ns-2.30.patch")
+    OR
+        a) copy over the files in simulation/src/ns-2.30/ to your ns source tree
+        b) add the following line "webcache/incastc.o webcache/incasts.o webcache/IncastTcpAppServerStub.o \" from simulation/src/ns-2.30/Makefile to your ns Makefile
+    AND FINALLY
+        rebuild ns
+
+* install ruby (to use the scripts provided in this distribution)
+* install gnuplot (to use the graphing scripts provided in this distribution)
+
+
+
+------------------------------
+Contents of the Distribution
+------------------------------
+app/                    - Application (server and client code) with synchronized reads over TCP
+    src/                - source code for server and client code
+    scripts/            - scripts to help you run test on clusters
+    graphing_scripts/   - scripts to help you generate graphs (like the ones in our paper)
+
+simulation/             - ns2 simulation code for synchronized reads over TCP
+    src/ns-2.30/        - source code. The subtree here corresponds to the subtree in the ns source directory
+    scripts/            - scripts to help you run automated test, generate logs and parse results
+    graphing_scripts/   - scripts to help you generate graphs from the parsed results (like the ones in our paper)
+    column.pl           - a perl script (written by Mark Claypool) used in some of our scripts (will be replaced by awk later).
+    example_tcl/        - contains an example tcl script with 4 flows using IncastTcpAppClient, IncastTcpAppServer
+                          Refer to this tcl script if you want to write your own ns tcl scripts using IncastTcpAppClient, IncastTcpAppServer.
+
+
+-----------------------------------
+Overview of simulation/scripts
+-----------------------------------
+(***) run_all.rb calls run_one.rb with different paramenters
+  - just used to automate running mutiple test scenarios
+  - moves logs to appropriate directories after each expt run so that logs are not overwritten (scp if necessary to save local disk space)
+  - use this script to check usage of run_one.rb
+
+
+(***) run_one.rb - the workhorse
+ - generates the ns file based on the input params
+ - Usage: ./run_one.rb numFlows bufSizeInPackets runTimeInSec synchSizeInBytes runType [minRtoinSec]
+ - supported runTypes:
+        -- reno                 - TCP Reno, DropTail
+        -- reno_lt              - TCP Reno, Limited Transmit, DropTail
+        -- reno_dup1            - TCP Reno, Reduced Dup-ACK threshold (1), DropTail
+        -- reno_rto             - TCP Reno, Reduced minRTO value, DropTail
+        -- reno_noss            - TCP Reno, Disable slow start, DropTail
+
+        -- newreno              - TCP NewReno, DropTail
+        -- newreno_lt           - TCP NewReno, Limited Transmit, DropTail
+        -- newreno_dup1         - TCP NewReno, Reduced Dup-ACK threshold (1), DropTail
+        -- newreno_rto          - TCP NewReno, Reduced minRTO value, DropTail
+        -- newreno_noss         - TCP NewReno, Disable slow start, DropTail
+        -- newreno_dup1_noss    - TCP NewReno, Reduced Dup-ACK threshold (1), Reduced minRTO value, DropTail
+
+        -- delack_newreno       - TCP NewReno, Delayed ACK, DropTail
+
+        -- sack                 - TCP SACK, DropTail
+        -- sack_rto             - TCP SACK, Reduced minRTO value, DropTail
+        -- sack_noss            - TCP SACK, Disable slow start, DropTail
+        -- sack_dup1            - TCP SACK, Reduced Dup-ACK threshold (1), DropTail
+
+        -- fack                 - TCP FACK, DropTail
+        -- fack_dup1            - TCP FACK, Reduced Dup-ACK threshold (1), DropTail
+
+
+        -- reno_red             - TCP Reno, RED
+        -- newreno_red          - TCP NewReno, RED
+        -- sack_red             - TCP SACK, RED
+
+ - runs the ns simulation
+	-- apart from the regular tracefile [out.tra] the simulation also outputs 
+		* refer to http://nile.wpi.edu/NS/ for NS2 trace file formats
+		a) per tcp flow trace files
+			output: tcpX.tr
+		b) instantaneous throughput (in Mbps) across flows (for every measurement interval which defaults to 10ms)
+			output: tput_instantaneous.tr
+		c) cumulative per tcp flow throughput (in Mbps) averaged over the running time
+			output: tput_cum_ind_avg.tr
+		d) cumulative throughput (in Mbps) across flows averaged over the running time
+			output: tput_cum_tot_avg.tr
+ - parses logs and extracts important information (in TEMPDIR)
+	a) timeout related information
+		i. output: tout.dat 
+		     [format => flow#, synchSize, #touts]
+		ii. output: tout_avg.dat 
+		     [format => bufSize, numFlows, synchSize, average#touts]
+		iii. output: for each flow X a file timeoutX.dat 
+		     [format => time_at_which_timeout_event_occurred]
+
+	b) retransmit information
+		i. output: rexmit_avg.dat 
+		   [format => bufSize, numFlows, synchSize, average#rexmits]
+
+	c) goodput information
+		i. output: gput_cum_avg.dat (from the last line of tput_cum_tot_avg.tr) 
+		   [format => synchSize, average_goodput]
+
+  - plots produced in GRAPHDIR
+	a) has the ability to generate squence number plots for data, ack and data_read_request packets for a flow
+	b) graph showing the average and instantaneous throughput of the flows overlayed with timeout and data_read_request events
+		[ _graph_gput_#{runType}_flows_#{flows}_synch_#{synchSize}_buf_#{bufSizeInPackets}_time_#{runTimeInSec}.eps ]
+
+  - performs timeout analysis (***  tout_analysis.rb)
+	-- output: TEMPDIR/dupacksAtTimeout.dat  
+	   [format => dupacksAtTimeout cwndAtTimeout timeAtWhichTimeoutOccured flow# seq_#_of_timedout_pkt]
+
+	-- generates plots in GRAPHDIR which show
+		a) histogram of Dupacks Received At Timeout (DART)
+			[ _graph_dupack_binned_#{runType}_flows_#{flows}_synch_#{synchSize}_buf_#{bufSizeInPackets}_time_#{runTimeInSec}.eps ]
+		b) histogram of Cwnd Size At Timeout
+			[ _graph_cwnd_binned_#{runType}_flows_#{flows}_synch_#{synchSize}_buf_#{bufSizeInPackets}_time_#{runTimeInSec}.eps ]
+
+	-- misc statistics
+		a) (***) detect_dropped_rexmit.rb  determines # of dropped retransmits
+			output: TEMPDIR/dropped_rextmits.dat 
+			[format => "#_of_times_dropped" "flow_#" "seq_#"]
+
+		b) (***) detect_uncategorized_timeouts.rb  determines the # of timeout events in the DART tail are not categorized as dropped retransmits
+			This script goes through all the timeout events and checks to see if the packets for which the timeout event was intended was retransmitted later AND dropped (list available in TEMPDIR/dropped_rextmits.dat from the earlier step). This is recorded in the field num_not_accounted_as_dropped_rexmits (see format below).
+			output: TEMPDIR/uncategorized_timeouts_in_dupack_tail.dat
+			[format => num_dropped_rexmits, num_timeouts_to_check(in dup_ack tail), num_accounted_as_dropped_rexmits, num_not_accounted_as_dropped_rexmits, remaining_dropped_rexmits]
+
+		c) (***) detect_last_packet_dropped.rb  pulls out the instances of timeout events caused by the last packet in the transfer of the SRU being dropped.
+			NOTE: currently works only for a SRU size of 256K
+			output: TEMPDIR/dropped_last_packet.dat
+			[format => dupacksAtTimeout timeAtWhichTimeoutOccured flow# seq_#_of_timedout_pkt]
+
+
+
+----------------------------------------
+Desciption of graph plotting scripts
+----------------------------------------
+TODO: explain scripts
+
+
+-----------------------------------
+Overview of app/scripts
+-----------------------------------
+(***) _run_all_wrapper2.sh -- Run this on the client node
+    --> Runs the experiment for a SRU size (e.g. 256K), N number of times (e.g. 10 runs)
+    --> calls _run_all.sh
+
+
+(***) _run_all.sh $SRU_SIZE $RUN_NUMBER
+(e.g. ./_run_all.sh 256000 2)
+    --> Driver script for 1 client and S servers [S servers, 1..S servers]
+    --> calls _run_servers_and_client.sh
+
+(***) _run_servers_and_client.sh $NUM_SERVERS $SRU_SIZE $RUN_NUMBER
+    --> extracts first $NUM_SERVERS entries in node_list_all.txt into node_list.txt
+    --> starts servers (nodes in node_list.txt)
+    --> starts client  (local machine) 
+        ---> 100 synchronized read operations performed
+        ---> log goes to ./logs/$RUN_NUMBER/client_$NUM_SERVERS_$SRU_SIZE.log
+    --> once the reads are all done, kills all ther server procs
+
+(***) _do_all.sh $FILE_WITH_NODE_LISTING $CMD_FILE
+    --> $CMD_FILE is a shell script remotely executs a command on the machine passed to it as the first argument.  An example $cmd_file file might have the following contents (e.g. app/scripts/_check_kernel.sh):
+        -------------------------
+        #!/bin/bash -x
+
+        #rsh -f $1 "uname -a";
+        ssh -n $1 "uname -a";
+        -------------------------
+
+    --> $FILE_WITH_NODE_LISTING is a plaintext file with hostnames seperated by newlines
+    --> for every hostname listed in $FILE_WITH_NODE_LISTING, do_all.sh runs the $CMD_FILE script passing it the hostname
+
+
+------------------------------------------------------------
+Location of logs for experiments for the FAST 2008 paper
+------------------------------------------------------------
+This is only useful for people within the group at CMU.
+Logs can be found at: /disk/agami2/aphanish/incast/data_dump
