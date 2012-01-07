@@ -1,0 +1,1144 @@
+diff -Naur ns-2.30.original/common/agent.cc ns-2.30/common/agent.cc
+--- ns-2.30.original/common/agent.cc	2008-07-25 10:53:58.000000000 -0400
++++ ns-2.30/common/agent.cc	2008-06-18 20:04:37.000000000 -0400
+@@ -353,7 +353,7 @@
+  */
+ void Agent::recvBytes(int nbytes)
+ {
+-	if (app_)
++	if (app_) 
+ 		app_->recv(nbytes);	
+ }
+ 
+@@ -458,6 +458,9 @@
+ 	hdr_cmn* ch = hdr_cmn::access(p);
+ 	ch->uid() = uidcnt_++;
+ 	ch->ptype() = type_;
++#ifndef _INCAST_DEBUG
++	printf("AMAR:: Agent::initpkt() packet size = %d, type = %d \n", size_, type_);
++#endif //_INCAST_DEBUG
+ 	ch->size() = size_;
+ 	ch->timestamp() = Scheduler::instance().clock();
+ 	ch->iface() = UNKN_IFACE.value(); // from packet.h (agent is local)
+diff -Naur ns-2.30.original/Makefile ns-2.30/Makefile
+--- ns-2.30.original/Makefile	2008-07-25 11:00:00.000000000 -0400
++++ ns-2.30/Makefile	2008-07-25 11:03:24.000000000 -0400
+@@ -58,7 +58,7 @@
+ LDFLAGS	= 
+ LDOUT	= -o $(BLANK)
+ 
+-DEFINE	= -DTCP_DELAY_BIND_ALL -DNO_TK -DTCLCL_CLASSINSTVAR  -DNDEBUG -DLINUX_TCP_HEADER -DUSE_SHM -DHAVE_LIBTCLCL -DHAVE_TCLCL_H -DHAVE_LIBOTCL1_12 -DHAVE_OTCL_H -DHAVE_LIBTK8_4 -DHAVE_TK_H -DHAVE_LIBTCL8_4 -DHAVE_TCL_H  -DHAVE_CONFIG_H -DNS_DIFFUSION -DSMAC_NO_SYNC -DCPP_NAMESPACE=std -DUSE_SINGLE_ADDRESS_SPACE -Drng_test
++DEFINE	= -DTCP_DELAY_BIND_ALL -DNO_TK -DTCLCL_CLASSINSTVAR  -DNDEBUG -DLINUX_TCP_HEADER -DUSE_SHM -DHAVE_LIBTCLCL -DHAVE_TCLCL_H -DHAVE_LIBOTCL1_12 -DHAVE_OTCL_H -DHAVE_LIBTK8_4 -DHAVE_TK_H -DHAVE_LIBTCL8_4 -DHAVE_TCL_H  -DHAVE_CONFIG_H -DNS_DIFFUSION -DSMAC_NO_SYNC -DCPP_NAMESPACE=std -DUSE_SINGLE_ADDRESS_SPACE -Drng_test -D_INCAST_DEBUG
+ 
+ INCLUDES = \
+ 	-I. \
+@@ -221,6 +221,7 @@
+ 	webcache/mcache.o webcache/webtraf.o \
+ 	webcache/webserver.o \
+ 	webcache/logweb.o \
++	webcache/incastc.o webcache/incasts.o webcache/IncastTcpAppServerStub.o \
+ 	empweb/empweb.o \
+ 	empweb/empftp.o \
+ 	realaudio/realaudio.o \
+diff -Naur ns-2.30.original/tcp/tcp.cc ns-2.30/tcp/tcp.cc
+--- ns-2.30.original/tcp/tcp.cc	2008-07-25 10:54:27.000000000 -0400
++++ ns-2.30/tcp/tcp.cc	2008-06-18 20:04:37.000000000 -0400
+@@ -695,6 +695,9 @@
+ 	/* Check if this is the initial SYN packet. */
+ 	if (seqno == 0) {
+ 		if (syn_) {
++#ifndef _INCAST_DEBUG
++			printf("AMAR :: sending SYN packet \n");
++#endif //_INCAST_DEBUG
+ 			databytes = 0;
+ 			curseq_ += 1;
+ 			hdr_cmn::access(p)->size() = tcpip_base_hdr_size_;
+@@ -745,6 +748,9 @@
+ 	}
+ 	else if (useHeaders_ == true) {
+ 		hdr_cmn::access(p)->size() += headersize();
++#ifndef _INCAST_DEBUG
++		printf("AMAR :: output() packet size = %d, header size = %d \n",	hdr_cmn::access(p)->size(), headersize());
++#endif //_INCAST_DEBUG
+ 	}
+         hdr_cmn::access(p)->size();
+ 
+@@ -789,6 +795,9 @@
+ 		curseq_ = TCP_MAXSEQ; 
+ 	else
+ 		curseq_ += (nbytes/size_ + (nbytes%size_ ? 1 : 0));
++#ifndef _INCAST_DEBUG
++	printf("AMAR :: TcpAgent::sendmsg() -> %d, maxburst_ = %d \n", nbytes, maxburst_);
++#endif //_INCAST_DEBUG
+ 	send_much(0, 0, maxburst_);
+ }
+ 
+@@ -896,6 +905,11 @@
+  */
+ void TcpAgent::send_much(int force, int reason, int maxburst)
+ {
++#ifndef _INCAST_DEBUG
++	printf("AMAR:: TcpAgent::send_much() called ! \n");
++	printf("AMAR:: TcpAgent::send_much() -> force = %d, reason = %d, maxburst = %d ! \n", force, reason, maxburst);
++#endif //_INCAST_DEBUG
++
+ 	send_idle_helper();
+ 	int win = window();
+ 	int npackets = 0;
+@@ -910,7 +924,17 @@
+ 		return;
+ 	while (t_seqno_ <= highest_ack_ + win && t_seqno_ < curseq_) {
+ 		if (overhead_ == 0 || force || qs_approved_) {
++
++#ifndef _INCAST_DEBUG
++			printf("AMAR:: TcpAgent::send_much() -> just before output() ! \n");
++#endif //_INCAST_DEBUG
++
+ 			output(t_seqno_, reason);
++
++#ifndef _INCAST_DEBUG
++			printf("AMAR:: TcpAgent::send_much() -> just after output()  - so the packet must be sent by now! \n");
++#endif //_INCAST_DEBUG
++
+ 			npackets++;
+ 			if (QOption_)
+ 				process_qoption_after_send () ; 
+@@ -1224,6 +1248,10 @@
+ void
+ TcpAgent::slowdown(int how)
+ {
++#ifndef _INCAST_DEBUG
++	printf("AMAR :: TcpAgent::slowdown() -> before SLOWDOWN cwnd = %d, how = %x \n",int(cwnd_), how);
++#endif //_INCAST_DEBUG
++
+ 	double decrease;  /* added for highspeed - sylvia */
+ 	double win, halfwin, decreasewin;
+ 	int slowstart = 0;
+@@ -1327,7 +1355,9 @@
+ 	
+ 
+ 
+-	
++#ifndef _INCAST_DEBUG
++	printf("AMAR :: TcpAgent::slowdown() -> after SLOWDOWN cwnd = %d \n", int(cwnd_));
++#endif //_INCAST_DEBUG
+ }
+ 
+ /*
+@@ -1793,11 +1823,17 @@
+ 			cwnd_ = initial_window();
+ 		}
+ 	} else if (tcph->seqno() == last_ack_) {
++#ifndef _INCAST_DEBUG
++		printf("AMAR :: TcpAgent::recv() -> dup_ack, dup_ack, dup_ack !!! \n");
++#endif //_INCAST_DEBUG
+                 if (hdr_flags::access(pkt)->eln_ && eln_) {
+                         tcp_eln(pkt);
+                         return;
+                 }
+ 		if (++dupacks_ == numdupacks_ && !noFastRetrans_) {
++#ifndef _INCAST_DEBUG
++			printf("AMAR :: TcpAgent::recv() -> dupack_action() called !!! \n");
++#endif //_INCAST_DEBUG
+ 			dupack_action();
+ 		} else if (dupacks_ < numdupacks_ && singledup_ ) {
+ 			send_one();
+@@ -1842,6 +1878,11 @@
+ 		// There has been a timeout - will trace this event
+ 		trace_event("TIMEOUT");
+ 
++		// AMAR ::
++#ifndef _INCAST_DEBUG
++		printf("AMAR :: TcpAgent::timeout() -> TIMEOUT !! \n");
++#endif //_INCAST_DEBUG
++
+ 		frto_ = 0;
+ 		// Set pipe_prev as per Eifel Response
+ 		pipe_prev_ = (window() > ssthresh_) ?
+diff -Naur ns-2.30.original/tcp/tcp-newreno.cc ns-2.30/tcp/tcp-newreno.cc
+--- ns-2.30.original/tcp/tcp-newreno.cc	2008-07-25 10:57:07.000000000 -0400
++++ ns-2.30/tcp/tcp-newreno.cc	2008-06-18 20:04:37.000000000 -0400
+@@ -160,7 +160,8 @@
+                  * problems with multiple fast retransmits in one
+                  * window of data.
+                  */
+-                	return;
++			goto reno_action; // instead of return
++                	// return;
+         }
+ 
+ reno_action:
+diff -Naur ns-2.30.original/tcp/tcp-reno.cc ns-2.30/tcp/tcp-reno.cc
+--- ns-2.30.original/tcp/tcp-reno.cc	2008-07-25 10:57:17.000000000 -0400
++++ ns-2.30/tcp/tcp-reno.cc	2008-06-18 20:04:37.000000000 -0400
+@@ -111,6 +111,9 @@
+ 			cwnd_ = initial_window();
+ 		}
+ 	} else if (tcph->seqno() == last_ack_) {
++#ifndef _INCAST_DEBUG
++		printf("AMAR :: DUPLICATE ACK \n");
++#endif //_INCAST_DEBUG
+ 		if (hdr_flags::access(pkt)->eln_ && eln_) {
+ 			tcp_eln(pkt);
+ 			return;
+@@ -210,6 +213,7 @@
+ 	trace_event("RENO_FAST_RETX");
+ 	recover_ = maxseq_;
+ 	last_cwnd_action_ = CWND_ACTION_DUPACK;
++	//printf("AMAR :: RenoTcpAgent::dupack_action() -> before SLOWDOWN flag1 = %x, flag2 = %x \n", CLOSE_SSTHRESH_HALF, CLOSE_CWND_HALF);
+ 	slowdown(CLOSE_SSTHRESH_HALF|CLOSE_CWND_HALF);
+ 	reset_rtx_timer(1,0);
+ 	output(last_ack_ + 1, TCP_REASON_DUPACK);	// from top
+diff -Naur ns-2.30.original/tcp/tcp-sink.cc ns-2.30/tcp/tcp-sink.cc
+--- ns-2.30.original/tcp/tcp-sink.cc	2008-07-25 10:57:20.000000000 -0400
++++ ns-2.30/tcp/tcp-sink.cc	2008-06-18 20:04:37.000000000 -0400
+@@ -190,6 +190,8 @@
+ #else /* ! TCP_DELAY_BIND_ALL */
+ 	bind("maxSackBlocks_", &max_sack_blocks_); // used only by sack
+ #endif /* TCP_DELAY_BIND_ALL */
++
++	parent = NULL;
+ }
+ 
+ void
+@@ -238,7 +240,17 @@
+ 
+ int TcpSink::command(int argc, const char*const* argv)
+ {
+-	if (argc == 2) {
++	if (strcmp(argv[1], "setparent") == 0) {
++		TcpApp* dst = (TcpApp *)TclObject::lookup(argv[2]);
++
++#ifndef _INCAST_DEBUG
++		printf("Amar :: Setting parent to %d \n", dst);
++#endif //_INCAST_DEBUG
++
++		set_parent(dst);
++		return (TCL_OK);
++	}
++	else if (argc == 2) {
+ 		if (strcmp(argv[1], "reset") == 0) {
+ 			reset();
+ 			return (TCL_OK);
+@@ -263,6 +275,10 @@
+ 
+ void TcpSink::ack(Packet* opkt)
+ {
++#ifndef _INCAST_DEBUG
++	printf("AMAR:: TcpSink::ack() -> Sending an ACK \n");
++#endif //_INCAST_DEBUG
++
+ 	Packet* npkt = allocpkt();
+ 	// opkt is the "old" packet that was received
+ 	// npkt is the "new" packet being constructed (for the ACK)
+@@ -345,6 +361,10 @@
+ 	
+ 	send(npkt, 0);
+ 	// send it
++
++#ifndef _INCAST_DEBUG
++	printf("AMAR:: TcpSink::ack() -> Done sending ACK \n");
++#endif //_INCAST_DEBUG
+ }
+ 
+ void TcpSink::add_to_ack(Packet*)
+@@ -355,10 +375,21 @@
+ 
+ void TcpSink::recv(Packet* pkt, Handler*)
+ {
++#ifndef _INCAST_DEBUG
++	printf("################################################################################ \n");
++	printf("AMAR :: TcpSink (0x%x) ::recv called \n", this);
++#endif //_INCAST_DEBUG
++
+ 	int numToDeliver;
++	hdr_cmn *thcmn = hdr_cmn::access(pkt);	// common header (size, etc)
+ 	int numBytes = hdr_cmn::access(pkt)->size();
+ 	// number of bytes in the packet just received
+ 	hdr_tcp *th = hdr_tcp::access(pkt);
++
++#ifndef _INCAST_DEBUG
++	printf("AMAR:: TcpSink::recv() -> packet type = %d, tcp flags = 0x%x \n", thcmn->ptype(), th->flags());
++#endif //_INCAST_DEBUG
++
+ 	/* W.N. Check if packet is from previous incarnation */
+ 	if (th->ts() < lastreset_) {
+ 		// Remove packet and do nothing
+@@ -379,8 +410,40 @@
+ 	// send any packets to the application
+       	ack(pkt);
+ 	// ACK the packet
++
++	if (numToDeliver && (parent != NULL)) {
++		//printf("AMAR:: in TcpSink::recvBytes() -> calling parent's recv \n");
++		parent->recv(numToDeliver);
++	}
++
++	/*
++	int datalen = thcmn->size() - th->hlen(); // # payload bytes
++
++#ifndef _INCAST_DEBUG
++	printf("AMAR :: TcpSink::recv() -> AAAAAAAAAAAAAAAAAAAAAAAA numBytes = %d, datalen = %d, seq# = %d \n", numBytes, datalen, th->seqno());
++#endif //_INCAST_DEBUG
++
++	if ((datalen >= 0) && (th->seqno() >= 1)) {
++		// Amar ::
++		// this may be totally worng as the packets may be out of order!!!!!!
++		// is this a valid concern at all - isn't the agent like a tcp socket that hands us data inorder?
++		//printf("AMAR :: AAAAAAAAAAAAAAAAAAAAAAAA numBytes = %d, datalen = %d \n", numBytes, datalen);
++		if(parent != NULL) {
++			parent->recv(numBytes);
++		}
++	}
++	*/
++
+ 	Packet::free(pkt);
+ 	// remove it from the system
++
++#ifndef _INCAST_DEBUG
++	printf("################################################################################ \n\n\n");
++#endif //_INCAST_DEBUG
++}
++
++void TcpSink::set_parent(TcpApp *p) {
++	parent = p;
+ }
+ 
+ static class DelSinkClass : public TclClass {
+diff -Naur ns-2.30.original/tcp/tcp-sink.h ns-2.30/tcp/tcp-sink.h
+--- ns-2.30.original/tcp/tcp-sink.h	2008-07-25 10:57:24.000000000 -0400
++++ ns-2.30/tcp/tcp-sink.h	2008-06-18 20:04:37.000000000 -0400
+@@ -39,6 +39,7 @@
+ #include <math.h>
+ #include "agent.h"
+ #include "tcp.h"
++#include "../webcache/tcpapp.h"
+ 
+ /* max window size */
+ // #define MWS 1024  
+@@ -104,6 +105,7 @@
+ 	void reset();
+ 	int command(int argc, const char*const* argv);
+ 	TracedInt& maxsackblocks() { return max_sack_blocks_; }
++	virtual void set_parent(TcpApp *p);
+ protected:
+ 	void ack(Packet*);
+ 	virtual void add_to_ack(Packet* pkt);
+@@ -128,7 +130,7 @@
+ 	double lastreset_; 	/* W.N. used for detecting packets  */
+ 				/* from previous incarnations */
+         int ecn_syn_;           /* allow SYN/ACK packets to be ECN-capable */
+-
++	TcpApp *parent;
+ };
+ 
+ class DelAckSink;
+diff -Naur ns-2.30.original/webcache/incast_app_data.h ns-2.30/webcache/incast_app_data.h
+--- ns-2.30.original/webcache/incast_app_data.h	1969-12-31 19:00:00.000000000 -0500
++++ ns-2.30/webcache/incast_app_data.h	2008-06-18 20:04:37.000000000 -0400
+@@ -0,0 +1,79 @@
++#ifndef ns_incast_app_data_h
++#define ns_incast_app_data_h
++
++#include "ns-process.h"
++
++// Application-level data unit types
++enum ControlType {
++	// Illegal type
++	INCAST_ILLEGAL = -1,
++
++        // 
++	INCAST_REQ = 100,
++        INCAST_DATA = 200,
++        INCAST_DONE = 300
++};
++
++
++// Interface for generic application-level data unit. It should know its 
++// size and how to make itself persistent.
++class IncastAppData : public AppData {
++protected:
++        ControlType packet_type_;
++        unsigned int src_id_;
++	char *buf_;
++        int buf_size_;
++public:
++
++	IncastAppData(ControlType it, unsigned int sid) : AppData(TCPAPP_STRING) { 
++            packet_type_ = it; 
++            src_id_ = sid;
++            buf_ = NULL;
++            buf_size_ = 0;
++        }
++
++	IncastAppData(ControlType it, unsigned int sid, int bufSize) : AppData(TCPAPP_STRING) { 
++            packet_type_ = it; 
++            src_id_ = sid;
++	    buf_ = (char *)malloc(sizeof(char) * (bufSize));
++            buf_size_ = bufSize;
++            for (int i = 0; i < (buf_size_ - 1); i++) {
++                buf_[i] = 'a';
++            }
++            buf_[buf_size_ - 1] = '\0';
++        }
++
++	IncastAppData(IncastAppData& d) : AppData(d.type()) { 
++            packet_type_ = d.packet_type_;
++            buf_size_ = d.buf_size_;
++            buf_ = (char *)malloc(sizeof(char) * buf_size_);
++            memcpy(buf_, d.buf_, buf_size_); // we copy the \0 too
++        }
++
++	virtual ~IncastAppData() {
++            delete []buf_;
++        }
++
++        //int get_buf_size() { return buf_size_; }
++
++	ControlType get_incast_type() const { return packet_type_; }
++
++        const unsigned int get_src_id() { return src_id_; }
++
++	virtual int size() const {
++#ifndef _INCAST_DEBUG
++	printf("\t AMAR:: IncastAppData::size() called \n");
++#endif //_INCAST_DEBUG
++        //return sizeof(IncastAppData) + buf_size_;
++            return buf_size_;
++        }
++
++	virtual IncastAppData* copy() {
++#ifndef _INCAST_DEBUG
++            printf("IncastAppData::copy() called !");
++#endif //_INCAST_DEBUG
++            return new IncastAppData(*this);
++	}
++};
++
++#endif // ns_incast_app_data_h
+diff -Naur ns-2.30.original/webcache/incastc.cc ns-2.30/webcache/incastc.cc
+--- ns-2.30.original/webcache/incastc.cc	1969-12-31 19:00:00.000000000 -0500
++++ ns-2.30/webcache/incastc.cc	2008-06-18 20:04:37.000000000 -0400
+@@ -0,0 +1,171 @@
++#include "incast.h"
++
++// IncastTcpAppClient
++static class IncastClientCncClass : public TclClass {
++public:
++    IncastClientCncClass() : TclClass("Application/IncastTcpAppClient") {}
++    TclObject* create(int argc, const char*const* argv) {
++        if (argc != 6)
++            return NULL;
++        Agent *tcp = (Agent *)TclObject::lookup(argv[4]);
++        int synch_data_size_in_bytes = atoi(argv[5]);
++        if (tcp == NULL) 
++            return NULL;
++        return (new IncastTcpAppClient(tcp, synch_data_size_in_bytes));
++    }
++} class_incastclientcnc_app;
++
++
++IncastTcpAppClient::IncastTcpAppClient(Agent *tcp, int synch_data_size_in_bytes) : TcpApp(tcp), num_dones_(0), synch_data_size_(synch_data_size_in_bytes)
++{
++#ifndef _INCAST_DEBUG
++    printf("Creating IncastTcpAppClient \n");
++    printf("creating dsts_ \n");
++#endif //_INCAST_DEBUG
++
++    dsts_ = new vector<IncastTcpAppServerStub *>();
++    start_ = 0;
++    initCount_ = 0;
++    
++
++#ifndef _INCAST_DEBUG
++    printf("\ndone creating dsts_ \n");
++    printf("size of dsts_: %d \n", dsts_->size());
++#endif //_INCAST_DEBUG
++}
++
++IncastTcpAppClient::~IncastTcpAppClient() {
++    for(unsigned int x=0; x<dsts_->size(); x++) 
++        {
++            delete (*dsts_)[x];
++	    
++        }
++    
++}
++
++void IncastTcpAppClient::process_done() 
++{
++    // TODO :: SYNCHRONIZATION
++    num_dones_++;
++    if (num_dones_ == dsts_->size()) {
++        num_dones_ = 0;
++        // iterate and send ask the stubs to send reqs out
++
++#ifndef _INCAST_DEBUG
++        printf("\t IncastTcpAppClient::process_done() -> got all %d dones \n", dsts_->size());
++#endif //_INCAST_DEBUG
++
++        //char c = getchar();
++        send_requests();
++    }
++}
++
++void IncastTcpAppClient::process_init()
++{
++    if (initCount_ < dsts_->size()) {
++	    (*dsts_)[initCount_]->send_init();
++    } else {
++#ifndef _INCAST_DEBUG
++    printf("done setting up all connections at %g\n", Scheduler::instance().clock());
++#endif //_INCAST_DEBUG
++	send_requests();
++    }
++    initCount_++;
++ 
++}
++
++void IncastTcpAppClient::send_requests()
++{
++
++#ifndef _INCAST_DEBUG
++    printf("IncastTcpAppClient::send_requests() -> Sending requests to %d servers...\n", dsts_->size());
++#endif //_INCAST_DEBUG
++
++/*
++    for(unsigned int x=0; x<dsts_->size(); x++) {
++#ifndef _INCAST_DEBUG
++        printf("\t sending request %d \n", x);
++#endif //_INCAST_DEBUG
++        (*dsts_)[x]->send_request();
++    }
++*/
++
++/*
++    for (unsigned int x=0; x<dsts_->size(); x++) {
++	int y = (start_ + x) % dsts_->size();
++	(*dsts_)[y]->send_request();
++    }
++    start_ = (start_ + 1) % dsts_->size();
++*/
++    
++
++    vector<int> *l  = new vector<int>;
++    for (int i = 0; i < dsts_->size(); i++) {
++        l->push_back(i);
++    }
++
++    srand(time(NULL));
++    int n = l->size();
++    for (int i = 0; i < n; i++) {
++        int r = rand() % (n-i);
++        int temp;
++        temp = (*l)[r];
++        (*l)[r] = (*l)[n-i-1];
++        (*l)[n-i-1] = temp;
++    }
++
++    for (int i = 0; i < n; i++) {
++        //        printf("Sending request to server %d\n", (*l)[i]);
++        (*dsts_)[(*l)[i]]->send_request();
++    }
++
++    delete l;
++    
++    
++}
++
++void IncastTcpAppClient::start() {
++
++#ifndef _INCAST_DEBUG
++    printf("IncastTcpAppClient::Starting...\n");
++#endif //_INCAST_DEBUG
++
++    //send_requests();
++    process_init();
++}
++
++int IncastTcpAppClient::command(int argc, const char*const* argv)
++{
++#ifndef _INCAST_DEBUG
++    printf("IncastTcpAppClient::command \n");
++#endif //_INCAST_DEBUG
++
++    if (strcmp(argv[1], "connect") == 0) {
++        IncastTcpAppServer* dst = (IncastTcpAppServer *)TclObject::lookup(argv[2]);
++        Agent* my_tcp_agent = (Agent *)TclObject::lookup(argv[3]);
++        TcpSink* my_tcp_sink_agent = (TcpSink *)TclObject::lookup(argv[4]);
++        if (dst == NULL) {
++	    return (TCL_ERROR);
++        }
++
++#ifndef _INCAST_DEBUG
++        printf("IncastTcpAppClient::command: %s %s\n", argv[1], argv[2]);
++        printf("server = %d \n", dst);
++#endif //_INCAST_DEBUG
++
++        // hopefully we get a new tcpagent (sending agent) for each server we need to connect to;
++        // use that as the agent
++        IncastTcpAppServerStub *stub = new IncastTcpAppServerStub(my_tcp_agent, my_tcp_sink_agent, this, synch_data_size_);
++        // set dst (incoming) as the Application we need to talk to
++        stub->set_dest(dst);
++        dsts_->push_back(stub);
++        // ask the server to connect to us - this basically means that he sets his dst to the stub
++        dst->connect(stub);
++        // the tcp_sink_agent needs to know who to make an upcall to when it gets a packet.
++        // the server will connect to this sink agent.
++        my_tcp_sink_agent->set_parent(stub);
++        return (TCL_OK);
++    }
++  
++    return TcpApp::command(argc, argv);
++}
+diff -Naur ns-2.30.original/webcache/incast.h ns-2.30/webcache/incast.h
+--- ns-2.30.original/webcache/incast.h	1969-12-31 19:00:00.000000000 -0500
++++ ns-2.30/webcache/incast.h	2008-06-18 20:04:37.000000000 -0400
+@@ -0,0 +1,100 @@
++#ifndef ns_incasts_h
++#define ns_incasts_h
++
++#include <vector>
++#include <iostream>
++#include <math.h>
++#include <stdio.h>
++#include <time.h>
++
++#include "agent.h"
++#include "tcpapp.h"
++#include "incast_app_data.h"
++#include "../tcp/tcp-sink.h"
++
++using namespace std;
++
++class IncastTcpAppServer;
++
++class IncastTcpAppServer;
++class IncastTcpAppServerStub;
++
++class IncastTcpAppClient : public TcpApp {
++ public:
++    IncastTcpAppClient(Agent *tcp, int synch_data_size_in_bytes);
++    ~IncastTcpAppClient();
++
++    virtual void send_requests();
++    virtual void process_done();
++    virtual void process_init();
++    virtual void start();
++    float startTime_;
++
++ protected:
++    virtual int command(int argc, const char*const* argv);
++    unsigned int num_dones_;
++    vector<IncastTcpAppServerStub *> *dsts_;
++    Agent *mytcp;
++    int synch_data_size_;
++    unsigned int initCount_;
++    unsigned int start_;
++    
++};
++
++class IncastTcpAppServer : public TcpApp {
++ protected:
++    virtual int command(int argc, const char*const* argv);
++    virtual void start() {}
++    virtual void stop() {}
++    int synch_data_size_;
++    unsigned int server_id_;
++
++ public:
++    IncastTcpAppServer(Agent *tcp, int synch_data_size_in_bytes);
++    ~IncastTcpAppServer();
++
++    // Send data to the next application in the chain
++    virtual void send_data(int size, IncastAppData* data) {
++        send(size, data);
++    }
++
++    virtual void send_done();
++
++    virtual void connect(IncastTcpAppServerStub *dst);
++
++    virtual void process_data(int size, AppData* data);
++
++    virtual void recv(int nbytes) {
++        TcpApp::recv(nbytes);
++    }
++
++    virtual void send(int nbytes, AppData *data) {
++        TcpApp::send(nbytes, data);
++    }
++
++    virtual AppData* get_data(int& i, AppData* ad) { 
++        return TcpApp::get_data(i, ad);
++    }
++
++    virtual void resume() {}
++
++};
++
++class IncastTcpAppServerStub : public TcpApp {
++ public:
++    IncastTcpAppServerStub(Agent *tcp, Agent *tcp_sink, IncastTcpAppClient *, int synch_data_size_in_bytes);
++    ~IncastTcpAppServerStub();
++    void set_dest(TcpApp *);
++    virtual void process_data(int size, AppData* data);
++    virtual void send_init();
++    virtual void send_request();
++    virtual void recv(int nbytes);
++
++ protected:
++    IncastTcpAppClient *itac_;
++    Agent *sink_agent;
++    int synch_data_size_;
++    int recvCallCount;
++};
++
++#endif // ns_incasts_h
+diff -Naur ns-2.30.original/webcache/incasts.cc ns-2.30/webcache/incasts.cc
+--- ns-2.30.original/webcache/incasts.cc	1969-12-31 19:00:00.000000000 -0500
++++ ns-2.30/webcache/incasts.cc	2008-06-18 20:04:37.000000000 -0400
+@@ -0,0 +1,107 @@
++#include "incast.h"
++
++// IncastTcpAppServer
++static class IncastServerCncClass : public TclClass {
++public:
++    IncastServerCncClass() : TclClass("Application/IncastTcpAppServer") {}
++    TclObject* create(int argc, const char*const* argv) {
++        if (argc != 6)
++            return NULL;
++        Agent *tcp = (Agent *)TclObject::lookup(argv[4]);
++        int synch_data_size_in_bytes = atoi(argv[5]);
++        if (tcp == NULL) 
++            return NULL;
++        return (new IncastTcpAppServer(tcp, synch_data_size_in_bytes));
++    }
++} class_incastservercnc_app;
++
++IncastTcpAppServer::IncastTcpAppServer(Agent *tcp, int synch_data_size_in_bytes) : TcpApp(tcp), synch_data_size_(synch_data_size_in_bytes)
++{
++    srand((int)this);
++    server_id_ = (unsigned int)rand();
++
++#ifndef _INCAST_DEBUG
++    printf("Creating IncastTcpAppServer %d \n", server_id_);
++#endif //_INCAST_DEBUG
++
++}
++
++IncastTcpAppServer::~IncastTcpAppServer() {
++
++}
++
++// called by TcpApp::recv
++void IncastTcpAppServer::process_data(int size, AppData* data) 
++{
++    IncastAppData *dataCast = (IncastAppData *) data;
++
++#ifndef _INCAST_DEBUG
++    printf("IncastTcpAppServer::process_data() called\n");
++#endif //_INCAST_DEBUG
++
++    if (dataCast == NULL)
++        return;
++    // XXX Default behavior:
++    if (target()) {
++        cout << "IncastTcpAppServer :: TARGET !!!! GO SHOP THERE ..." << endl;
++        send_data(size, dataCast);
++    }
++    else if (dataCast->type() == TCPAPP_STRING) {
++        if (dataCast->get_incast_type() == INCAST_REQ) {
++
++#ifndef _INCAST_DEBUG
++            printf("\t IncastTcpAppServer::process_data() -> Server got a request, sending out data packets \n");
++#endif //_INCAST_DEBUG
++
++            IncastAppData *iap = new IncastAppData(INCAST_DATA, this->server_id_, synch_data_size_);
++
++#ifndef _INCAST_DEBUG
++            printf("\t IncastTcpAppServer::process_data() -> synch_data_size_: %d, data_packet_size = %d \n", synch_data_size_, iap->size());
++#endif //_INCAST_DEBUG
++
++            send_data(iap->size(), iap);
++
++#ifndef _INCAST_DEBUG
++            printf("\t IncastTcpAppServer::process_data() ->  sent data packets \n");
++#endif //_INCAST_DEBUG
++
++            //send_done();
++            //printf("\t IncastTcpAppServer:: sent done packet \n");
++        }
++	else if (dataCast->get_incast_type() == INCAST_DONE) {
++	    IncastAppData *iap = new IncastAppData(INCAST_DONE, this->server_id_, 100);
++	    send_data(iap->size(), iap);
++	}
++        else {
++            cout << "IncastTcpAppServer :: INVALID PACKET RECEIVED ON CLIENT - Incast ControlPacket Type " << dataCast->get_incast_type() << endl;
++        }
++    }
++    else {
++        cout << "IncastTcpAppServer :: Unrecognized packet type." << endl;
++    }
++}
++
++void IncastTcpAppServer::send_done()
++{
++    IncastAppData *iap = new IncastAppData(INCAST_DONE, this->server_id_, 10);
++    // we don't care what the size of the payload is going to be
++    send(iap->size(), iap);
++}
++
++int IncastTcpAppServer::command(int argc, const char*const* argv)
++{
++#ifndef _INCAST_DEBUG
++    printf("IncastTcpAppServer::command() \n");
++#endif //_INCAST_DEBUG
++
++    return TCL_ERROR;
++}
++
++void IncastTcpAppServer::connect(IncastTcpAppServerStub *dst)
++{ 
++#ifndef _INCAST_DEBUG
++    printf("IncastTcpAppServer::connect() \n");
++#endif //_INCAST_DEBUG
++
++    dst_ = dst; 
++}
+diff -Naur ns-2.30.original/webcache/IncastTcpAppServerStub.cc ns-2.30/webcache/IncastTcpAppServerStub.cc
+--- ns-2.30.original/webcache/IncastTcpAppServerStub.cc	1969-12-31 19:00:00.000000000 -0500
++++ ns-2.30/webcache/IncastTcpAppServerStub.cc	2008-06-18 20:04:37.000000000 -0400
+@@ -0,0 +1,158 @@
++#include "incast.h"
++
++IncastTcpAppServerStub::IncastTcpAppServerStub(Agent *tcp, Agent *tcp_sink, IncastTcpAppClient *itac, int synch_data_size_in_bytes) : TcpApp(tcp), synch_data_size_(synch_data_size_in_bytes)
++{
++    sink_agent = tcp_sink;
++    itac_ = itac;
++    recvCallCount = 0;
++}
++
++IncastTcpAppServerStub::~IncastTcpAppServerStub() {
++}
++
++void IncastTcpAppServerStub::set_dest(TcpApp *dst) {
++        dst_ = dst;
++}
++
++void IncastTcpAppServerStub::recv(int size)
++{
++#ifndef _INCAST_DEBUG
++	printf("IncastTcpAppServerStub:: recv() starts - Got a packet! \n");
++#endif //_INCAST_DEBUG
++
++	if (recvCallCount < 1) {
++	    recvCallCount++;
++	}
++	else if (recvCallCount == 1) {
++	    curdata_ = dst_->rcvr_retrieve_data();
++	    if (curdata_ != 0) {
++		process_data(curdata_->size(), curdata_->data());
++		delete curdata_;
++		curdata_ = NULL;
++	    }   
++	    recvCallCount++;
++	    return;
++	}
++
++
++        // wait for ceil(S/1040) packets before making the calback - 
++        /* send() of "one way" tcp sending agents behave in a funny way.
++           If you send data that is less than 1000 bytes, the agents ends-up sending 1040 bytes. If you send data more than 1000 bytes (let us say X) - the agents end-up sending ceil(X/1000) packets each 1040 bytes.
++           So effectively TCP is more like UDP here (packet based, instead of stream based). Wonder why they did that.
++        */
++
++        // thresh = ceil( (S + 64) /1040 )
++        // complex math! we rule!
++        //int thresh = ceil( ((double)synch_data_size_) / (1040 - 24) );
++        int thresh = ceil( ((double)synch_data_size_) / (1040 - 40) );
++        curbytes_ += size;
++
++#ifndef _INCAST_DEBUG
++        printf("curbytes: %u, size: %u \n", curbytes_, size);
++#endif //_INCAST_DEBUG
++
++        //#ifndef _INCAST_DEBUG
++        //printf("IncastTcpAppServerStub:: recv() -> thresh = %d,  curbytes_-40/1040 = %.20f. \n", thresh, (double)((curbytes_-40)/1040));
++        //#endif //_INCAST_DEBUG
++
++        //if ( ((curbytes_-40)/1040) >= thresh) {
++        if ( (curbytes_/1040) >= thresh ) {
++#ifndef _INCAST_DEBUG
++            printf("IncastTcpAppServerStub:: recv() -> before detach\n");
++#endif //_INCAST_DEBUG
++
++            curdata_ = dst_->rcvr_retrieve_data();
++
++#ifndef _INCAST_DEBUG
++            printf("IncastTcpAppServerStub:: recv() -> after detach\n");
++#endif //_INCAST_DEBUG
++
++            if (curdata_ == 0) {
++                printf("\t IncastTcpAppServerStub::recv() -> BAD_BAD !!! BAD_BAD !!! BAD_BAD !!! BAD_BAD !!!  BAD_BAD !!! \n");
++		fprintf(stderr, "[%g] %s receives a packet but no callback!\n",
++			Scheduler::instance().clock(), name_);
++            }
++            else if (curdata_ != 0) {
++#ifndef _INCAST_DEBUG
++                printf("IncastTcpAppServerStub:: recv() -> Got %d packets with a total of %d bytes. \n", thresh, thresh*1040);
++                printf("IncastTcpAppServerStub:: recv() -> data_bytes = %d \n", curdata_->bytes());
++#endif //_INCAST_DEBUG
++
++                process_data(curdata_->size(), curdata_->data());
++                // Then cleanup this data transmission
++                delete curdata_;
++                curdata_ = NULL;
++                curbytes_ = 0;
++            }
++        }
++        else {
++#ifndef _INCAST_DEBUG
++            printf("\t IncastTcpAppServerStub:: recv() -> Gather more moss !!! \n");
++#endif //_INCAST_DEBUG
++        }
++}
++
++void IncastTcpAppServerStub::process_data(int size, AppData* data) {
++
++#ifndef _INCAST_DEBUG
++    printf("IncastTcpAppServerStub::process_data() called \n");
++#endif //_INCAST_DEBUG
++
++    IncastAppData *dataCast = (IncastAppData *) data;
++    if (dataCast == NULL)
++        return;
++    // XXX Default behavior:
++    if (target()) {
++        cout << "IncastTcpAppServerStub :: TARGET !!!! GO SHOP THERE ..." << endl;
++        send_data(size, dataCast);
++    }
++    else if (dataCast->type() == TCPAPP_STRING) {
++        if (dataCast->get_incast_type() == INCAST_DATA) {
++            // who cares about the data?
++#ifndef _INCAST_DEBUG
++            printf("\t DATA !!! DATA !!! DATA !!! DATA !!!  DATA !!! \n");
++            printf("\t Got callback for data of size (including app header) = %d. Data from %d\n", size, dataCast->get_src_id());
++#endif //_INCAST_DEBUG
++            itac_->process_done();
++        }
++        
++        else if (dataCast->get_incast_type() == INCAST_DONE) {
++#ifndef _INCAST_DEBUG
++            printf("\t DONE !!! DONE !!! DONE !!! DONE !!!  DONE !!! \n");
++            printf("\t IncastTcpAppServer :: Got done packet from %d \n", dataCast->get_src_id());
++#endif //_INCAST_DEBUG
++            itac_->process_init();
++        }
++        
++        else {
++            printf("\t INVALID !!! INVALID !!! INVALID !!! INVALID !!!  INVALID !!! \n");
++            cout << "\t IncastTcpAppServer :: INVALID PACKET RECEIVED ON CLIENT - Incast ControlPacket Type " << dataCast->get_incast_type() << endl;
++        }
++    }
++    else {
++        printf("\t UNRECOGNIZED !!! UNRECOGNIZED !!! UNRECOGNIZED !!! UNRECOGNIZED !!!  UNRECOGNIZED !!! \n");
++        cout << "\t IncastTcpAppClient :: Unrecognized packet type." << endl;
++    }
++}
++
++void IncastTcpAppServerStub::send_request() {
++
++#ifndef _INCAST_DEBUG
++    printf("================================================================================ \n");
++    printf("IncastTcpAppServerStub::send_requests() -> Sending request \n");
++#endif //_INCAST_DEBUG
++
++    IncastAppData *iad = new IncastAppData(INCAST_REQ, 0, 100);
++    send(iad->size(), iad);
++
++#ifndef _INCAST_DEBUG
++    printf("IncastTcpAppServerStub::send_requests() -> Done sending request \n");
++    printf("================================================================================ \n");
++#endif //_INCAST_DEBUG
++}
++
++void IncastTcpAppServerStub::send_init() {
++
++    IncastAppData *iad = new IncastAppData(INCAST_DONE, 0, 100);
++    send(iad->size(), iad);
++}
+diff -Naur ns-2.30.original/webcache/tcpapp.cc ns-2.30/webcache/tcpapp.cc
+--- ns-2.30.original/webcache/tcpapp.cc	2008-07-25 10:59:32.000000000 -0400
++++ ns-2.30/webcache/tcpapp.cc	2008-07-25 10:46:18.000000000 -0400
+@@ -173,6 +173,11 @@
+ void TcpApp::send(int nbytes, AppData *cbk)
+ {
+ 	CBuf *p = new CBuf(cbk, nbytes);
++
++#ifndef _INCAST_DEBUG
++	printf("Amar :: Sending nbytes = %d, CBuf->size() = %d, CBuf->bytes() = %d, sizeof(Cbuf) = %d \n", nbytes, p->size(),p->bytes(), sizeof(CBuf));
++#endif //_INCAST_DEBUG
++
+ #ifdef TCPAPP_DEBUG
+ 	p->time() = Scheduler::instance().clock();
+ #endif
+@@ -183,57 +188,93 @@
+ // All we need to know is that our sink has received one message
+ void TcpApp::recv(int size)
+ {
++
++#ifndef _INCAST_DEBUG
++	printf("Amar:: TcpApp::recv() -> start \n");
++#endif //_INCAST_DEBUG
++
+ 	// If it's the start of a new transmission, grab info from dest, 
+ 	// and execute callback
+-	if (curdata_ == 0)
+-		curdata_ = dst_->rcvr_retrieve_data();
++        if (curdata_ == 0) {
++#ifndef _INCAST_DEBUG
++            printf("Amar:: TcpApp::recv() -> before detach\n");
++#endif //_INCAST_DEBUG
++
++            curdata_ = dst_->rcvr_retrieve_data();
++
++#ifndef _INCAST_DEBUG
++            printf ("Amar:: TcpApp::recv() -> after detach\n");
++#endif //_INCAST_DEBUG
++        }
++
+ 	if (curdata_ == 0) {
++#ifndef _INCAST_DEBUG
++            printf("\t TcpApp::recv() -> BAD_BAD !!! BAD_BAD !!! BAD_BAD !!! BAD_BAD !!!  BAD_BAD !!! \n");
++#endif //_INCAST_DEBUG
+ 		fprintf(stderr, "[%g] %s receives a packet but no callback!\n",
+ 			Scheduler::instance().clock(), name_);
+-		return;
++		//return;
+ 	}
+-	curbytes_ += size;
++        else if (curdata_ != 0) {
++#ifndef _INCAST_DEBUG
++            printf("Amar:: TcpApp::recv() -> size = %d, curdata_bytes = %d\n", size, curdata_->bytes());
++#endif //_INCAST_DEBUG
++            curbytes_ += size;
++
+ #ifdef TCPAPP_DEBUG
+-	fprintf(stderr, "[%g] %s gets data size %d, %s\n", 
+-		Scheduler::instance().clock(), name(), curbytes_, 
+-		curdata_->data());
++            fprintf(stderr, "[%g] %s gets data size %d, %s\n", 
++                    Scheduler::instance().clock(), name(), curbytes_, 
++                    curdata_->data());
+ #endif
+-	if (curbytes_ == curdata_->bytes()) {
+-		// We've got exactly the data we want
+-		// If we've received all data, execute the callback
+-		process_data(curdata_->size(), curdata_->data());
+-		// Then cleanup this data transmission
+-		delete curdata_;
+-		curdata_ = NULL;
+-		curbytes_ = 0;
+-	} else if (curbytes_ > curdata_->bytes()) {
+-		// We've got more than we expected. Must contain other data.
+-		// Continue process callbacks until the unfinished callback
+-		while (curbytes_ >= curdata_->bytes()) {
+-			process_data(curdata_->size(), curdata_->data());
+-			curbytes_ -= curdata_->bytes();
++
++            process_data(curdata_->size(), curdata_->data());
++            // Then cleanup this data transmission
++            delete curdata_;
++            curdata_ = NULL;
++            curbytes_ = 0;
++
++            /*
++            if (curbytes_ == curdata_->bytes()) {
++                // We've got exactly the data we want
++                // If we've received all data, execute the callback
++                process_data(curdata_->size(), curdata_->data());
++                // Then cleanup this data transmission
++                delete curdata_;
++                curdata_ = NULL;
++                curbytes_ = 0;
++            } 
++            else if (curbytes_ > curdata_->bytes()) {
++                // We've got more than we expected. Must contain other data.
++                // Continue process callbacks until the unfinished callback
++
++                printf("TcpApp:: We got more than what we were told we will get \n");
++                while (curbytes_ >= curdata_->bytes()) {
++                    process_data(curdata_->size(), curdata_->data());
++                    curbytes_ -= curdata_->bytes();
+ #ifdef TCPAPP_DEBUG
+-			fprintf(stderr, 
+-				"[%g] %s gets data size %d(left %d)\n", 
+-				Scheduler::instance().clock(), 
+-				name(),
+-				curdata_->bytes(), curbytes_);
+-				//curdata_->data());
++                    fprintf(stderr, 
++                            "[%g] %s gets data size %d(left %d)\n", 
++                            Scheduler::instance().clock(), 
++                            name(),
++                            curdata_->bytes(), curbytes_);
++                    //curdata_->data());
+ #endif
+-			delete curdata_;
+-			curdata_ = dst_->rcvr_retrieve_data();
+-			if (curdata_ != 0)
+-				continue;
+-			if ((curdata_ == 0) && (curbytes_ > 0)) {
+-				fprintf(stderr, "[%g] %s gets extra data!\n",
+-					Scheduler::instance().clock(), name_);
+-				Tcl::instance().eval("[Simulator instance] flush-trace");
+-				abort();
+-			} else
+-				// Get out of the look without doing a check
+-				break;
+-		}
+-	}
++                    delete curdata_;
++                    curdata_ = dst_->rcvr_retrieve_data();
++                    if (curdata_ != 0)
++                        continue;
++                    if ((curdata_ == 0) && (curbytes_ > 0)) {
++                        fprintf(stderr, "[%g] %s gets extra data!\n",
++                                Scheduler::instance().clock(), name_);
++                        Tcl::instance().eval("[Simulator instance] flush-trace");
++                        abort();
++                    } else
++                        // Get out of the look without doing a check
++                        break;
++                }
++            }
++            */
++        }
+ }
+ 
+ void TcpApp::resume()
+@@ -282,6 +323,7 @@
+ 	if (target())
+ 		send_data(size, data);
+ 	else if (data->type() == TCPAPP_STRING) {
++	  printf("hi\n");
+ 		TcpAppString *tmp = (TcpAppString*)data;
+ 		Tcl::instance().eval(tmp->str());
+ 	}
+diff -Naur ns-2.30.original/webcache/tcpapp.h ns-2.30/webcache/tcpapp.h
+--- ns-2.30.original/webcache/tcpapp.h	2008-07-25 10:59:29.000000000 -0400
++++ ns-2.30/webcache/tcpapp.h	2008-06-18 20:04:37.000000000 -0400
+@@ -123,9 +123,11 @@
+ 	// Do nothing when a connection is terminated
+ 	virtual void resume();
+ 
++        // AMAR :: made this public as I wanted to access it in ServerStub and Server
++	CBuf* rcvr_retrieve_data() { return cbuf_.detach(); }
++
+ protected:
+ 	virtual int command(int argc, const char*const* argv);
+-	CBuf* rcvr_retrieve_data() { return cbuf_.detach(); }
+ 
+ 	// We don't have start/stop
+ 	virtual void start() { abort(); } 

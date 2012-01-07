@@ -1,0 +1,27 @@
+$ diff  webcache/incast.h /home/vrv/ns-allinone-2.31/ns-2.31/webcache/incast.h
+62a79,80
+>     virtual void send_stuff();
+
+$ diff  webcache/IncastTcpAppServerStub.cc /home/vrv/ns-allinone-2.31/ns-2.31/webcache/IncastTcpAppServerStub.cc
+145,146c145,148
+<     IncastAppData *iad = new IncastAppData(INCAST_REQ, 0, 100);
+<     send(iad->size(), iad);
+---
+>     //IncastAppData *iad = new IncastAppData(INCAST_REQ, 0, 100);
+>     //send(iad->size(), iad);
+>     IncastTcpAppServer *srv = (IncastTcpAppServer*) dst_;
+>     srv->send_stuff();
+
+$ diff  webcache/incasts.cc /home/vrv/ns-allinone-2.31/ns-2.31/webcache/incasts.cc
+83a90,100
+> void IncastTcpAppServer::send_stuff()
+> {
+>             IncastAppData *iap = new IncastAppData(INCAST_DATA, this->server_id_, synch_data_size_);
+>
+> #ifndef _INCAST_DEBUG
+>             printf("\t IncastTcpAppServer::process_data() -> synch_data_size_: %d, data_packet_size = %d \n", synch_data_size_, iap->size());
+> #endif //_INCAST_DEBUG
+>
+>             send_data(iap->size(), iap);
+> }
+>

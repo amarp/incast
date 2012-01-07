@@ -1,0 +1,10 @@
+node01.pdl.cmu.local
+node02.pdl.cmu.local
+node03.pdl.cmu.local
+node04.pdl.cmu.local
+node05.pdl.cmu.local
+node06.pdl.cmu.local
+node07.pdl.cmu.local
+node08.pdl.cmu.local
+node09.pdl.cmu.local
+node10.pdl.cmu.local
